@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Бит & Скутер</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #000;
+      font-family: sans-serif;
+    }
+
+    /* Фоновое изображение 1 */
+    #background {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      filter: brightness(0.85);
+      transition: filter 0.05s ease, transform 0.05s ease;
+      z-index: 1;
+    }
+
+    /* Изображение 2 (скутер), перемещающееся по экрану */
+    #rider {
+      position: absolute;
+      bottom: 10%;
+      left: -350px; /* начальная точка за левым краем */
+      width: 280px;
+      height: auto;
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(255, 0, 50, 0.4);
+      z-index: 2;
+      will-change: transform, left;
+      pointer-events: none;
+      transform-origin: bottom center;
+    }
+
+    /* Кнопка старта (браузеры блокируют автовоспроизведение звука без клика) */
+    #start-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      cursor: pointer;
+      color: #fff;
+      text-align: center;
+      backdrop-filter: blur(4px);
+      transition: opacity 0.3s ease;
+    }
+
+    #start-overlay h1 {
+      font-size: 2.2rem;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+
+    #start-overlay p {
+      font-size: 1.1rem;
+      color: #ccc;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Экран запуска -->
+  <div id="start-overlay">
+    <h1>Нажми, чтобы запустить</h1>
+    <p>Включит звук и запустит анимацию</p>
+  </div>
+
+  <!-- Первое изображение на фоне -->
+  <img id="background" src="IMG_1050.jpg" alt="Фон">
+
+  <!-- Второе изображение, двигающееся под бит -->
+  <img id="rider" src="IMG_0983.jpg" alt="Скутер">
+
+  <!-- Аудиодорожка -->
+  <audio id="audio" src="music.mp3" loop></audio>
+
+  <script>
+    const overlay = document.getElementById('start-overlay');
+    const audio = document.getElementById('audio');
+    const bg = document.getElementById('background');
+    const rider = document.getElementById('rider');
+
+    let audioCtx, analyser, dataArray;
+    let posX = -300;
+    const speed = 2.5; // Базовая скорость движения вперед (пикселей за кадр)
+
+    overlay.addEventListener('click', () => {
+      overlay.style.opacity = '0';
+      setTimeout(() => overlay.remove(), 300);
+
+      // Инициализация Web Audio API для анализа частот (баса/бита)
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const source = audioCtx.createMediaElementSource(audio);
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+
+      source.connect(analyser);
+      analyser.connect(audioCtx.destination);
+
+      dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+      audio.play();
+      animate();
+    });
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      if (!analyser) return;
+
+      // Получаем спектр частот
+      analyser.getByteFrequencyData(dataArray);
+
+      // Считаем уровень низких частот (бит / бочка / бас) в диапазоне первых 6 бинов
+      let bassEnergy = 0;
+      for (let i = 0; i < 6; i++) {
+        bassEnergy += dataArray[i];
+      }
+      bassEnergy = bassEnergy / 6; // Значение от 0 до 255
+
+      // Нормализуем силу удара баса от 0 до 1
+      const normalizedBass = Math.max(0, (bassEnergy - 140) / 115);
+
+      // Движение слева направо по экрану
+      posX += speed + normalizedBass * 4;
+      if (posX > window.innerWidth + 50) {
+        posX = -320; // Возвращаем в начало, когда уехал за правый край
+      }
+
+      rider.style.left = `${posX}px`;
+
+      // Реакция на бит: прыжок, наклон вперед-назад и пульсация размера
+      const scale = 1 + normalizedBass * 0.35;
+      const jumpY = -normalizedBass * 45;
+      const tilt = (Math.sin(Date.now() / 120) * 4) + (normalizedBass * 8);
+
+      rider.style.transform = `translateY(${jumpY}px) scale(${scale}) rotate(${tilt}deg)`;
+
+      // Фоновое изображение слегка приближается и вспыхивает на сильном басе
+      bg.style.transform = `scale(${1 + normalizedBass * 0.08})`;
+      bg.style.filter = `brightness(${0.85 + normalizedBass * 0.4})`;
+    }
+  </script>
+</body>
+</html>
